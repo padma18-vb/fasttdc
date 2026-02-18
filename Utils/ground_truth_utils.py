@@ -4,6 +4,7 @@ from lenstronomy.LensModel.lens_model import LensModel
 from lenstronomy.LensModel.Solver.lens_equation_solver import LensEquationSolver
 from lenstronomy.Analysis.kinematics_api import KinematicsAPI
 from astropy.cosmology import FlatLambdaCDM
+from astropy.io import fits
 # my own utils
 import sys
 sys.path.insert(0, '/Users/smericks/Desktop/StrongLensing/darkenergy-from-LAGN/')
@@ -185,3 +186,98 @@ def populate_truth_sigma_v_IFU(metadata_df,gt_cosmo_astropy):
         # write in the value!
         for b in range(0,len(sigma_v_nirspec)):
             metadata_df.loc[r,'sigma_v_NIRSPEC_bin%d_kmpersec'%(b)] = sigma_v_nirspec[b]
+
+
+def slsim_catalog_to_fasttdc_catalog(slsim_catalog_path):
+    """
+    Converts an slsim catalog to a pandas dataframe with keys formatted for
+        fasttdc convention
+    
+    Args:
+        slsim_catalog_path (string): path to a .fits file containing
+            the slsim catalog
+
+    Returns:
+        pandas.DataFrame()
+
+    NOTE: .byteswap().newbyteorder() is required to switch byte ordering convention
+        from .fits -> pd.DataFrame()
+    """
+
+    # hard-coded column map from slsim convention to fasttdc convention
+    column_map = {
+        # MAIN DEFLECTOR
+        'x_deflector_mass_position_arcsec': 'main_deflector_parameters_center_x',
+        'y_deflector_mass_position_arcsec': 'main_deflector_parameters_center_y',
+        'deflector_mass_e1': 'main_deflector_parameters_e1',
+        'deflector_mass_e2': 'main_deflector_parameters_e2',
+        'deflector_pl_slope': 'main_deflector_parameters_gamma',
+        'external_shear_gamma1': 'main_deflector_parameters_gamma1',
+        'external_shear_gamma2': 'main_deflector_parameters_gamma2',
+        'theta_E_arcsec': 'main_deflector_parameters_theta_E',
+        # SOURCE LIGHT
+        'host_light_R_eff_arcsec': 'source_parameters_R_sersic',
+        'x_host_position_arcsec': 'source_parameters_center_x',
+        'y_host_position_arcsec': 'source_parameters_center_y',
+        'host_light_e1': 'source_parameters_e1',
+        'host_light_e2': 'source_parameters_e2',
+        'unlensed_host_mag_i': 'source_parameters_mag_app', # TODO: decide what to use
+        'host_light_n_sersic': 'source_parameters_n_sersic',
+        # 'source_parameters_output_ab_zeropoint', do we need this?
+        # LENS LIGHT
+        'deflector_light_R_eff_arcsec': 'lens_light_parameters_R_sersic',
+        'x_deflector_light_position_arcsec': 'lens_light_parameters_center_x',
+        'y_deflector_light_position_arcsec': 'lens_light_parameters_center_y',
+        'deflector_light_e1': 'lens_light_parameters_e1',
+        'deflector_light_e2': 'lens_light_parameters_e2',
+        'deflector_mag_i': 'lens_light_parameters_mag_app', # TODO: decide what to use
+        'deflector_light_n_sersic': 'lens_light_parameters_n_sersic',
+        # 'lens_light_parameters_output_ab_zeropoint': 'lens_light_parameters_output_ab_zeropoint',
+        # POINT SOURCE
+        'unlensed_ps_mag_i': 'point_source_parameters_mag_app',
+        #point_source_parameters_output_ab_zeropoint
+        'x_ps_position_arcsec': 'point_source_parameters_x_point_source',
+        'y_ps_position_arcsec': 'point_source_parameters_y_point_source',
+        'num_images': 'point_source_parameters_num_images',
+        'x_ps_image_positions_arcsec_1': 'point_source_parameters_x_image_0',
+        'y_ps_image_positions_arcsec_1': 'point_source_parameters_y_image_0',
+        'x_ps_image_positions_arcsec_2': 'point_source_parameters_x_image_1',
+        'y_ps_image_positions_arcsec_2': 'point_source_parameters_y_image_1',
+        'x_ps_image_positions_arcsec_3': 'point_source_parameters_x_image_2',
+        'y_ps_image_positions_arcsec_3': 'point_source_parameters_y_image_2',
+        'x_ps_image_positions_arcsec_4': 'point_source_parameters_x_image_3',
+        'y_ps_image_positions_arcsec_4': 'point_source_parameters_y_image_3'
+    }
+
+
+    # load in slsim catalog
+    with fits.open(slsim_catalog_path) as hdul:
+        slsim_catalog = hdul[1].data  # assuming the catalog is in the first extension
+
+    # first put data into a dict, then into dataframe (to avoid fragmentation)
+    fasttdc_catalog_dict = {}
+
+    # loop thru all keys in slsim catalog
+    for col in slsim_catalog.dtype.names:
+        # if in column map, use the new column name
+        if col in column_map.keys():
+            fasttdc_catalog_dict[column_map[col]] = slsim_catalog[col].byteswap().newbyteorder()
+        # else, save the existing column
+        else:
+            fasttdc_catalog_dict[col] = slsim_catalog[col].byteswap().newbyteorder()
+
+    # account for edge cases 
+    # handle columns that duplicate information (but are necessary for paltas usage)
+    fasttdc_catalog_dict['main_deflector_parameters_z_lens'] = slsim_catalog['z_D'].byteswap().newbyteorder()
+    fasttdc_catalog_dict['lens_light_parameters_z_source'] = slsim_catalog['z_D'].byteswap().newbyteorder()
+    fasttdc_catalog_dict['source_parameters_z_source'] = slsim_catalog['z_S'].byteswap().newbyteorder()
+    fasttdc_catalog_dict['point_source_parameters_z_point_source'] = slsim_catalog['z_S'].byteswap().newbyteorder()
+
+    # columns that need to be manually added
+    fasttdc_catalog_dict['main_deflector_parameters_dec_0'] = np.zeros(len(slsim_catalog['z_S']))
+    fasttdc_catalog_dict['main_deflector_parameters_ra_0'] = np.zeros(len(slsim_catalog['z_S']))
+
+    # now instantiate dataframe from the dict
+    fasttdc_catalog_df = pd.DataFrame(fasttdc_catalog_dict)
+
+    return fasttdc_catalog_df
