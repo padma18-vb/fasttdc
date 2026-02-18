@@ -20,8 +20,8 @@ def main(args):
     #('/scratch/users/sydney3/forecast/darkenergy-from-LAGN/'+
     #    'Experiments/lsst_forecast/DataVectors/gold/quad_posteriors.h5')
     # NOTE: hardcoded for gold right now...
-    truth_df = pd.read_csv('/scratch/users/sydney3/forecast/darkenergy-from-LAGN/'+
-        'Experiments/lsst_forecast/DataVectors/gold/truth_metadata.csv')
+    truth_df = pd.read_csv('/scratch/users/sydney3/forecast/roman/fasttdc/'+
+        'Experiments/roman_forecast/DataVectors/lsst_catalog/truth_metadata.csv')
 
     # read in fpd samps, lens_param_samps, beta_ani_samps
     with FileLock(h5_posteriors_file + ".lock"):
