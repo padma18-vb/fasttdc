@@ -54,9 +54,9 @@ likelihood_obj_list = []
 for j,dv_dict in enumerate(data_vector_dict_list):
     print('Processing subsample %d'%(j))
     #print('data vector keys: ', dv_dict.keys())
-    print('fpd samples: ', dv_dict['fpd_samples'])
+    #print('fpd samples: ', dv_dict['fpd_samples'])
     fpd_sample_shape = dv_dict['fpd_samples'].shape
-    print('fpd_sample_shape: ', fpd_sample_shape)
+    #print('fpd_sample_shape: ', fpd_sample_shape)
     if 'kin_pred_samples' in dv_dict.keys():
         kin_pred_samples_shape = dv_dict['kin_pred_samples'].shape
         lklhd_obj = tdc_sampler.TDCKinLikelihood(
