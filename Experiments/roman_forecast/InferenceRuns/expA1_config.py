@@ -9,7 +9,7 @@ from scipy.stats import norm, multivariate_normal
 RANDOM_SEED = 1
 
 # file locations
-static_dv_file = 'InferenceRuns/expA2/static_datavectors_seed'+str(RANDOM_SEED)+'.json'
+static_dv_file = 'InferenceRuns/expA1/static_datavectors_seed'+str(RANDOM_SEED)+'.json'
 
 # 3 modeling options...locations of samples from joint fermat/csqrt(J) posteriors
 quads_20perc_h5_file = 'DataVectors/lsst_catalog/from_sherlock/quad_posteriors_20percfpd.h5' # LSST
@@ -18,10 +18,10 @@ quads_03perc_h5_file = 'DataVectors/lsst_catalog/from_sherlock/quad_posteriors_0
 
 # 
 dbls_20perc_h5_file = 'DataVectors/lsst_catalog/from_sherlock/dbl_posteriors_20percfpd.h5' # LSST
-dbls_05perc_h5_file = 'DataVectors/lsst_catalog/from_sherlock/dbl_posteriors_05percfpd.h5' # ROMAN
+#dbls_05perc_h5_file = 'DataVectors/lsst_catalog/from_sherlock/dbl_posteriors_05percfpd.h5' # ROMAN
 #dbls_03perc_h5_file = 'DataVectors/lsst_catalog/from_sherlock/dbl_posteriors_03percfpd.h5' # ADDITIONAL
 
-lsst_metadata_file = 'DataVectors/lsst_catalog/truth_metadata_FIXED.csv'
+lsst_metadata_file = 'DataVectors/lsst_catalog/truth_metadata_popsigma05.csv'
 
 NUM_FPD_SAMPS = 5000
 NUM_MCMC_EPOCHS = 10
@@ -32,7 +32,7 @@ OMEGA_M_PRIOR = True # !!!! INFORMATIVE Omega_M prior when True !!!!!
 # this beta_ani prior does affect the inference.
 BETA_ANI_PRIOR = norm(loc=0.,scale=0.2).logpdf
 # where to store the chain...
-BACKEND_PATH = 'InferenceRuns/expA2/LCDM_seed'+str(RANDOM_SEED)+'_backend.h5'
+BACKEND_PATH = 'InferenceRuns/expA1/LCDM_seed'+str(RANDOM_SEED)+'_backend.h5'
 RESET_BACKEND=True
 
 # assumed modeling prior
@@ -169,16 +169,6 @@ print('Including %d Lsst-Only Dbls'%(len(lsst_only_dbls_catalog_idxs)))
 lsst_df = lsst_df[~lsst_df['catalog_idx'].isin(lsst_only_dbls_catalog_idxs)].reset_index(drop=True)
 
 
-########################################################
-# Upgrade 1/4 of these lenses with Roman imaging (5% fpd)
-########################################################
-
-# integer division for indexing
-num_rom_aper_quads = len(lsst_aper_quads_catalog_idxs) // 4
-num_rom_only_quads = len(lsst_only_quads_catalog_idxs) // 4
-num_rom_aper_dbls = len(lsst_aper_dbls_catalog_idxs) // 4
-num_rom_only_dbls = len(lsst_only_dbls_catalog_idxs) // 4
-
 ##############################
 # Set-up inference configs
 ##############################
@@ -202,53 +192,17 @@ likelihood_configs = {
         'log_prob_beta_ani_nu_int':BETA_ANI_PRIOR
     },
 
-    # lsst quads with aperture kin, UPGRADED with Roman imaging (~10 lenses)
-    'roman_aper_quads':{
-        'posteriors_h5_file':quads_05perc_h5_file, # UPGRADE TO 5% fpd
-        'metadata_file':lsst_metadata_file,
-        'catalog_idxs':lsst_aper_quads_catalog_idxs[:num_rom_aper_quads],
-        'cosmo_model':COSMO_MODEL,
-        'td_meas_error_percent':None,
-        'td_meas_error_days':3., # 3-Day LSST Meas. Precision
-        'kappa_ext_meas_error_value':0.05,
-        'kinematic_type':'4MOST',
-        'kin_meas_error_percent':0.03, # 3% single-aperture
-        'kin_meas_error_kmpersec':None,
-        'num_gaussianized_samps':NUM_FPD_SAMPS,
-        'lens_params_nu_int_means':mu_lp_gold,
-        'lens_params_nu_int_stddevs':stddev_lp_gold,
-        'log_prob_beta_ani_nu_int':BETA_ANI_PRIOR
-    },
-
-    # lsst quads with aperture kin (~30 lenses)
+    # lsst quads with aperture kin (40 lenses)
     'lsst_aper_quads':{
         'posteriors_h5_file':quads_20perc_h5_file,
         'metadata_file':lsst_metadata_file,
-        'catalog_idxs':lsst_aper_quads_catalog_idxs[num_rom_aper_quads:],
-        'cosmo_model':COSMO_MODEL,
-        'td_meas_error_percent':None,
-        'td_meas_error_days':3., # 5-Day LSST Meas. Precision
-        'kappa_ext_meas_error_value':0.05,
-        'kinematic_type':'4MOST',
-        'kin_meas_error_percent':0.03, # 3% single-aperture
-        'kin_meas_error_kmpersec':None,
-        'num_gaussianized_samps':NUM_FPD_SAMPS,
-        'lens_params_nu_int_means':mu_lp_gold,
-        'lens_params_nu_int_stddevs':stddev_lp_gold,
-        'log_prob_beta_ani_nu_int':BETA_ANI_PRIOR
-    },
-
-    # quads without kinematics
-    'roman_only_quads':{
-        'posteriors_h5_file':quads_05perc_h5_file, # UPGRADE TO 5% fpd
-        'metadata_file':lsst_metadata_file,
-        'catalog_idxs':lsst_only_quads_catalog_idxs[:num_rom_only_quads],
+        'catalog_idxs':lsst_aper_quads_catalog_idxs,
         'cosmo_model':COSMO_MODEL,
         'td_meas_error_percent':None,
         'td_meas_error_days':3., # 3-Day LSST Meas. Precision
         'kappa_ext_meas_error_value':0.05,
-        'kinematic_type':None,
-        'kin_meas_error_percent':None,
+        'kinematic_type':'4MOST',
+        'kin_meas_error_percent':0.03, # 3% single-aperture
         'kin_meas_error_kmpersec':None,
         'num_gaussianized_samps':NUM_FPD_SAMPS,
         'lens_params_nu_int_means':mu_lp_gold,
@@ -259,7 +213,7 @@ likelihood_configs = {
     'lsst_only_quads':{
         'posteriors_h5_file':quads_20perc_h5_file,
         'metadata_file':lsst_metadata_file,
-        'catalog_idxs':lsst_only_quads_catalog_idxs[num_rom_only_quads:],
+        'catalog_idxs':lsst_only_quads_catalog_idxs,
         'cosmo_model':COSMO_MODEL,
         'td_meas_error_percent':None,
         'td_meas_error_days':3., # 3-Day LSST Meas. Precision
@@ -274,51 +228,16 @@ likelihood_configs = {
     },
 
     # lsst dbls with aperture kin (40 lenses)
-    'roman_aper_dbls':{
-        'posteriors_h5_file':dbls_05perc_h5_file, # UPGRADE TO 5% fpd
-        'metadata_file':lsst_metadata_file,
-        'catalog_idxs':lsst_aper_dbls_catalog_idxs[:num_rom_aper_dbls],
-        'cosmo_model':COSMO_MODEL,
-        'td_meas_error_percent':None,
-        'td_meas_error_days':3., # 3-Day LSST Meas. Precision
-        'kappa_ext_meas_error_value':0.05,
-        'kinematic_type':'4MOST',
-        'kin_meas_error_percent':0.03, # 3% single-aperture
-        'kin_meas_error_kmpersec':None,
-        'num_gaussianized_samps':NUM_FPD_SAMPS,
-        'lens_params_nu_int_means':mu_lp_gold,
-        'lens_params_nu_int_stddevs':stddev_lp_gold,
-        'log_prob_beta_ani_nu_int':BETA_ANI_PRIOR
-    },
-
     'lsst_aper_dbls':{
         'posteriors_h5_file':dbls_20perc_h5_file,
         'metadata_file':lsst_metadata_file,
-        'catalog_idxs':lsst_aper_dbls_catalog_idxs[num_rom_aper_dbls:],
+        'catalog_idxs':lsst_aper_dbls_catalog_idxs,
         'cosmo_model':COSMO_MODEL,
         'td_meas_error_percent':None,
         'td_meas_error_days':3., # 3-Day LSST Meas. Precision
         'kappa_ext_meas_error_value':0.05,
         'kinematic_type':'4MOST',
         'kin_meas_error_percent':0.03, # 3% single-aperture
-        'kin_meas_error_kmpersec':None,
-        'num_gaussianized_samps':NUM_FPD_SAMPS,
-        'lens_params_nu_int_means':mu_lp_gold,
-        'lens_params_nu_int_stddevs':stddev_lp_gold,
-        'log_prob_beta_ani_nu_int':BETA_ANI_PRIOR
-    },
-
-    # doubles with no kinematics
-    'roman_only_dbls':{
-        'posteriors_h5_file':dbls_05perc_h5_file, # UPGRADE TO 5% fpd
-        'metadata_file':lsst_metadata_file,
-        'catalog_idxs':lsst_only_dbls_catalog_idxs[:num_rom_only_dbls],
-        'cosmo_model':COSMO_MODEL,
-        'td_meas_error_percent':None,
-        'td_meas_error_days':3., # 3-Day LSST Meas. Precision
-        'kappa_ext_meas_error_value':0.05,
-        'kinematic_type':None,
-        'kin_meas_error_percent':None,
         'kin_meas_error_kmpersec':None,
         'num_gaussianized_samps':NUM_FPD_SAMPS,
         'lens_params_nu_int_means':mu_lp_gold,
@@ -329,7 +248,7 @@ likelihood_configs = {
     'lsst_only_dbls':{
         'posteriors_h5_file':dbls_20perc_h5_file,
         'metadata_file':lsst_metadata_file,
-        'catalog_idxs':lsst_only_dbls_catalog_idxs[num_rom_only_dbls:],
+        'catalog_idxs':lsst_only_dbls_catalog_idxs,
         'cosmo_model':COSMO_MODEL,
         'td_meas_error_percent':None,
         'td_meas_error_days':3., # 3-Day LSST Meas. Precision

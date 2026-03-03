@@ -856,6 +856,22 @@ def OmegaM_w0waCDM_lambda_int_beta_ani_log_prior(hyperparameters):
 
     else:
         return within_bounds
+
+# TODO: finish incorporating this option for informative OmegaM + LCDM
+def OmegaM_LCDM_lambda_int_beta_ani_log_prior(hyperparameters):
+    """Include approximation of Pantheon+ Prior used in TDCOSMO 2025 (https://arxiv.org/pdf/2506.03023)
+        Note page 17: "Pantheon+ effectively provided a prior on Ωm (i.e., Ωm = 0.334 ± 0.018)"
+    """
+
+    # returns 0 or -np.inf
+    within_bounds = LCDM_lambda_int_beta_ani_log_prior(hyperparameters)
+
+    if within_bounds == 0:   
+        # note we center our ground truth at 0.3     
+        return norm.logpdf(hyperparameters[1],loc=0.3,scale=0.018)
+
+    else:
+        return within_bounds
         
 
 def INFORMATIVE_w0waCDM_lambda_int_beta_ani_log_prior(hyperparameters):
@@ -1172,7 +1188,10 @@ def log_posterior(hyperparameters, cosmo_model, tdc_likelihood_list,
     elif cosmo_model == 'LCDM_lambda_int':
         lp = LCDM_lambda_int_log_prior(hyperparameters)
     elif cosmo_model == 'LCDM_lambda_int_beta_ani':
-        lp = LCDM_lambda_int_beta_ani_log_prior(hyperparameters)
+        if use_OmegaM:
+            lp = OmegaM_LCDM_lambda_int_beta_ani_log_prior(hyperparameters)
+        else:
+            lp = LCDM_lambda_int_beta_ani_log_prior(hyperparameters)
     elif cosmo_model == 'w0waCDM':
         lp = w0waCDM_log_prior(hyperparameters)
     elif cosmo_model == 'w0waCDM_lambda_int_beta_ani':
