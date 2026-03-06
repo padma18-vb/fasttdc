@@ -872,6 +872,45 @@ def OmegaM_LCDM_lambda_int_beta_ani_log_prior(hyperparameters):
 
     else:
         return within_bounds
+
+def InformedPop_InformedOmegaM_LCDM_lambda_int_beta_ani_log_prior(hyperparameters):
+    """Informative prior on BOTH OmegaM and populations of lambda_int, beta_ani
+        assuming some external sample is constraining lambda_int, beta_ani properties 
+    """
+
+    # returns 0 or -np.inf
+    within_bounds = LCDM_lambda_int_beta_ani_log_prior(hyperparameters)
+
+    if within_bounds == 0:   
+        # note we center our ground truth at 0.3     
+        om_prior = norm.logpdf(hyperparameters[1],loc=0.3,scale=0.018)
+        lint_prior = norm.logpdf(hyperparameters[2],loc=1.,scale=0.05)
+        bani_prior = norm.logpdf(hyperparameters[4],loc=0.,scale=0.05)
+        
+        return (om_prior+lint_prior+bani_prior)
+
+    else:
+        return within_bounds
+
+
+def InformedPop_InformedOmegaM_w0waCDM_lambda_int_beta_ani_log_prior(hyperparameters):
+    """Informative prior on BOTH OmegaM and populations of lambda_int, beta_ani
+        assuming some external sample is constraining lambda_int, beta_ani properties 
+    """
+
+    # returns 0 or -np.inf
+    within_bounds = w0waCDM_lambda_int_beta_ani_log_prior(hyperparameters)
+
+    if within_bounds == 0:   
+        # note we center our ground truth at 0.3     
+        om_prior = norm.logpdf(hyperparameters[1],loc=0.3,scale=0.018)
+        lint_prior = norm.logpdf(hyperparameters[4],loc=1.,scale=0.05)
+        bani_prior = norm.logpdf(hyperparameters[6],loc=0.,scale=0.05)
+
+        return (om_prior+lint_prior+bani_prior)
+
+    else:
+        return within_bounds
         
 
 def INFORMATIVE_w0waCDM_lambda_int_beta_ani_log_prior(hyperparameters):
@@ -1169,7 +1208,8 @@ def log_likelihood(hyperparameters,tdc_likelihood_list):
     return fll
 
 def log_posterior(hyperparameters, cosmo_model, tdc_likelihood_list,
-    use_informative=False,use_OmegaM=False,use_tdcosmo25=False):
+    use_informative=False,use_inf_pop=False,
+    use_OmegaM=False,use_tdcosmo25=False):
     """
     Args:
         hyperparameters ([float]): 
@@ -1188,7 +1228,9 @@ def log_posterior(hyperparameters, cosmo_model, tdc_likelihood_list,
     elif cosmo_model == 'LCDM_lambda_int':
         lp = LCDM_lambda_int_log_prior(hyperparameters)
     elif cosmo_model == 'LCDM_lambda_int_beta_ani':
-        if use_OmegaM:
+        if use_inf_pop:
+            lp = InformedPop_InformedOmegaM_LCDM_lambda_int_beta_ani_log_prior(hyperparameters)
+        elif use_OmegaM:
             lp = OmegaM_LCDM_lambda_int_beta_ani_log_prior(hyperparameters)
         else:
             lp = LCDM_lambda_int_beta_ani_log_prior(hyperparameters)
@@ -1199,6 +1241,8 @@ def log_posterior(hyperparameters, cosmo_model, tdc_likelihood_list,
             lp = INFORMATIVE_w0waCDM_lambda_int_beta_ani_log_prior(hyperparameters)
             if use_OmegaM:
                 lp = OmegaM_INFORMATIVE_w0waCDM_lambda_int_beta_ani_log_prior(hyperparameters)
+        elif use_inf_pop:
+            lp = InformedPop_InformedOmegaM_w0waCDM_lambda_int_beta_ani_log_prior(hyperparameters)
         elif use_OmegaM:
             lp = OmegaM_w0waCDM_lambda_int_beta_ani_log_prior(hyperparameters)
         elif use_tdcosmo25:
@@ -1219,7 +1263,7 @@ def log_posterior(hyperparameters, cosmo_model, tdc_likelihood_list,
 def fast_TDC(tdc_likelihood_list, data_vector_list, num_emcee_samps=1000,
     n_walkers=20, use_mpi=False, use_multiprocess=False, backend_path=None, 
     reset_backend=True,sampler_type='emcee',use_informative=False,
-    use_OmegaM=False,use_tdcosmo25=False,init_seed=None):
+    use_inf_pop=False,use_OmegaM=False,use_tdcosmo25=False,init_seed=None):
     """
     Args:
         tdc_likelihood_list ([TDCLikelihood]): list of likelihood objects 
@@ -1257,7 +1301,7 @@ def fast_TDC(tdc_likelihood_list, data_vector_list, num_emcee_samps=1000,
 
     log_posterior_fn = partial(log_posterior, cosmo_model=cosmo_model,
         tdc_likelihood_list=tdc_likelihood_list,use_informative=use_informative,
-        use_OmegaM=use_OmegaM,use_tdcosmo25=use_tdcosmo25)
+        use_inf_pop=use_inf_pop,use_OmegaM=use_OmegaM,use_tdcosmo25=use_tdcosmo25)
     # need this fnc for dynesty
     log_likelihood_fn = partial(log_likelihood,
         tdc_likelihood_list=tdc_likelihood_list)

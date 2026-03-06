@@ -81,6 +81,7 @@ tenIFU_chain = tdc_sampler.fast_TDC(likelihood_obj_list,data_vector_dict_list,
     use_mpi=use_MPI, use_multiprocess=use_multiprocess,
     backend_path=config_module.BACKEND_PATH,
     reset_backend=config_module.RESET_BACKEND,
+    use_inf_pop=getattr(config_module, "INF_POP_PRIOR", False),
     use_OmegaM=getattr(config_module, "OMEGA_M_PRIOR", False),
     use_tdcosmo25=getattr(config_module, "TDCOSMO_PRIOR", False),
     init_seed=getattr(config_module, "INIT_SEED", None))
