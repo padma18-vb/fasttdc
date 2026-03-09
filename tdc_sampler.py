@@ -887,7 +887,7 @@ def InformedPop_InformedOmegaM_LCDM_lambda_int_beta_ani_log_prior(hyperparameter
         # NOTE: modified to extreme amt. of precision
         lens_pop_prior = multivariate_normal.logpdf(hyperparameters[2:6],
             mean=[1.,0.05,0.,0.05],
-            cov=np.diag([0.01,0.01,0.01,0.01]**2))
+            cov=np.diag(np.asarray([0.01,0.01,0.01,0.01])**2))
         #lint_mu_prior = norm.logpdf(hyperparameters[2],loc=1.,scale=0.05)
         #bani_prior = norm.logpdf(hyperparameters[4],loc=0.,scale=0.05)
         
@@ -911,7 +911,7 @@ def InformedPop_InformedOmegaM_w0waCDM_lambda_int_beta_ani_log_prior(hyperparame
         # NOTE: modified to extreme amt. of precision
         lens_pop_prior = multivariate_normal.logpdf(hyperparameters[4:8],
             mean=[1.,0.05,0.,0.05],
-            cov=np.diag([0.01,0.01,0.01,0.01]**2))
+            cov=np.diag(np.asarray([0.01,0.01,0.01,0.01])**2))
         #lint_prior = norm.logpdf(hyperparameters[4],loc=1.,scale=0.05)
         #bani_prior = norm.logpdf(hyperparameters[6],loc=0.,scale=0.05)
 
