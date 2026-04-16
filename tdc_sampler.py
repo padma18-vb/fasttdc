@@ -481,8 +481,6 @@ class TDCKinLikelihood(TDCLikelihood):
             use_gamma_info (bool): If False, removes reweighting from likelihood
                 evaluation (any population level gamma params should just
                 return the prior then...)
-            beta_ani_samples (): None if beta_ani not in population model
-                (n_lenses,n_fpd_samples)
 
         Note:
             likelihood evaluation requires an accompanying data_vector_dict 
