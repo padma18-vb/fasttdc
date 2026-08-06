@@ -813,8 +813,8 @@ def w0waCDM_lambda_int_beta_ani_log_prior(hyperparameters):
 def tdcosmo25_lambda_int_beta_ani_log_prior(hyperparameters):
     """
     Args:
-        hyperparameters ([H0,omega_M,mu_lambda_int,sigma_lambda_int,
-            mu_gamma,sigma_gamma])
+        hyperparameters ([H0, omega_M,w0, wa, mu_lambda_int, sigma_lambda_int,
+            mu_beta_ani, sigma_beta_ani, mu_gamma_lens,sigma_gamma_lens])
     """
 
     if hyperparameters[0] < 0 or hyperparameters[0] > 150: #h0

@@ -4,9 +4,13 @@ import h5py
 import pandas as pd
 import numpy as np
 from scipy.stats import norm, multivariate_normal
+import sys
+import os
+dirname = os.path.dirname(__file__)
+sys.path.insert(0, os.path.join(dirname, '../'))
 
 # random seed
-RANDOM_SEED = 1
+RANDOM_SEED = 6
 
 # file locations
 static_dv_file = 'InferenceRuns/exp0_2/static_datavectors_seed'+str(RANDOM_SEED)+'.json'
@@ -28,9 +32,11 @@ gold_metadata_file = 'DataVectors/gold/truth_metadata.csv'
 silver_metadata_file = 'DataVectors/silver/truth_metadata.csv'
 
 NUM_FPD_SAMPS = 5000
-NUM_MCMC_EPOCHS = 1
+NUM_MCMC_EPOCHS = 1000
 NUM_MCMC_WALKERS = 50
 COSMO_MODEL = 'w0waCDM_lambda_int_beta_ani'
+OMEGA_M_PRIOR = False
+TDCOSMO_PRIOR = False
 HI_REWEIGHTING = False
 # this is here for storage, but doesn't affect the inference for now
 mu_lp_gold = np.asarray([0.85,0.,0.,2.09,0.,0.,0.,0.,0.,0.]) # hst_norms.csv
@@ -40,7 +46,7 @@ stddev_lp_silver = np.asarray([0.70,0.1,0.1,0.20,0.20,0.20,0.06,0.06,0.37,0.37])
 # this beta_ani prior does affect the inference.
 BETA_ANI_PRIOR = norm(loc=0.,scale=0.2).logpdf
 # where to store the chain...
-BACKEND_PATH = 'InferenceRuns/exp0_2/w0wa_seed'+str(RANDOM_SEED)+'_backend.h5'
+BACKEND_PATH = 'InferenceRuns/exp0_2/2TESTCODE_w0wa_seed'+str(RANDOM_SEED)+'_backend.h5'
 RESET_BACKEND=True
 
 # truth information for those indices
@@ -67,6 +73,7 @@ nirspec_quads_avail = np.where(
 )[0]
 # take the catalog idxs you want
 catalog_idx_avail = gold_df.loc[nirspec_quads_avail,'catalog_idx'].to_numpy()
+print(catalog_idx_avail)
 nirspec_quads_catalog_idxs = np.random.choice(catalog_idx_avail,
     size=num_quads,replace=False)
 # then remove them from the dataframe
