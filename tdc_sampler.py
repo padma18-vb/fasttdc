@@ -1346,9 +1346,9 @@ def fast_TDC(tdc_likelihood_list, data_vector_list, num_emcee_samps=1000,
                     tik_mcmc = time.time()
                     if not reset_backend and backend is not None:
                         # init_state=None will have it pick-up where it left off?
-                        _ = sampler.run_mcmc(None,nsteps=num_emcee_samps,progress=False)
+                        _ = sampler.run_mcmc(None,nsteps=num_emcee_samps,progress=True)
                     else:
-                        _ = sampler.run_mcmc(cur_state,nsteps=num_emcee_samps,progress=False)
+                        _ = sampler.run_mcmc(cur_state,nsteps=num_emcee_samps,progress=True)
                     tok_mcmc = time.time()
                     print("Avg. Time per MCMC Step: %.3f seconds"%((tok_mcmc-tik_mcmc)/num_emcee_samps))
                 elif sampler_type == 'dynesty':

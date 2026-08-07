@@ -4,7 +4,9 @@ import pandas as pd
 import h5py
 from scipy.stats import norm, multivariate_normal, uniform
 import sys
-sys.path.insert(0, '/Users/smericks/Desktop/StrongLensing/darkenergy-from-LAGN/')
+import re
+# sys.path.insert(0, '/Users/smericks/Desktop/StrongLensing/darkenergy-from-LAGN/')
+sys.path.insert(0, '/Users/padmavenkatraman/Documents/StrongLensing/fastTDC/')
 import tdc_sampler
 
 
@@ -40,6 +42,32 @@ def retrieve_truth_td(metadata_df,num_td):
         td_truth = metadata_df.loc[:,['td01','td02','td03']].to_numpy()
 
     return td_truth
+
+def extract_cov(s, max_dim=3):
+    """Parse a printed numpy 2D array string, return top-left k x k block,
+    where k = min(true matrix size, max_dim). No padding."""
+    if pd.isna(s):
+        return None
+
+    nums = [float(n) for n in re.findall(r'-?\d+\.?\d*(?:[eE][+-]?\d+)?', s)]
+    n = int(round(np.sqrt(len(nums))))
+    if n * n != len(nums):
+        raise ValueError(f"Parsed {len(nums)} numbers, not a perfect square: {s[:60]}...")
+
+    full = np.array(nums).reshape(n, n)
+    k = min(n, max_dim)
+    return full[:k, :k]
+
+
+def retrieve_measured_td(df,num_td):
+    if num_td == 1: 
+        # NOTE: will this keep the last dim=(..,..,1) ? 
+        td_measured = df.loc[:,['td01']].to_numpy()
+    elif num_td == 3:
+        td_measured = df.loc[:,['td01','td02','td03']].to_numpy()
+    df['prec_scaled_matrix'] = df['prec_scaled'].apply(extract_cov)
+    td_prec = np.array(df['prec_scaled_matrix'].to_list())
+    return td_measured, td_prec
 
 def retrieve_truth_kin(metadata_df,kinematic_type):
     """
@@ -152,7 +180,9 @@ def create_static_data_vectors(
     lens_params_nu_int_means=None,
     lens_params_nu_int_stddevs=None,
     log_prob_beta_ani_nu_int=None,
-    debias_models=False):
+    debias_models=False,
+    use_td_measurements=False, 
+    td_measurements_file=None):
     """
     Args:
         posteriors_h5_file ()
@@ -195,12 +225,22 @@ def create_static_data_vectors(
 
         # set-up indexing
         h5_catalog_idxs = h5['catalog_idxs'][:]
+        if isinstance(h5_catalog_idxs[0], bytes):
+            h5_catalog_idxs = [x.decode('utf-8') for x in h5_catalog_idxs]
+        if isinstance(catalog_idxs[0], bytes):
+            catalog_idxs = [x.decode('utf-8') for x in catalog_idxs]
+        # print('h5_catalog_idxs:',h5_catalog_idxs)
+        # print('catalog_idxs:',catalog_idxs)
         my_idxs = np.isin(h5_catalog_idxs,catalog_idxs)
-
+        # print('my_idxs:',my_idxs)
+        # print(h5['fpd_samps'][my_idxs])
         fpd_samps = h5['fpd_samps'][my_idxs]
         lens_param_samps = h5['lens_param_samps'][my_idxs]
         beta_ani_samps = h5['beta_ani_samps'][my_idxs]
         h5_catalog_idxs = h5['catalog_idxs'][my_idxs]
+
+        if len(my_idxs) == 0:
+            raise ValueError("No matching catalog_idxs found in posteriors_h5_file")
 
         # pull c_sqrtJ_samps based on kinematic type
         if kinematic_type is not None:
@@ -227,10 +267,21 @@ def create_static_data_vectors(
     metadata_idx = np.isin(metadata_catalog_idxs,catalog_idxs)
     metadata_df = all_metadata_df.loc[metadata_idx]
 
-    # emulate time-delay measurement
+    
     td_truth = retrieve_truth_td(metadata_df, num_td)
-    td_meas, td_meas_prec = emulate_measurements(td_truth, 
-        td_meas_error_percent,td_meas_error_days)
+    print()
+    if use_td_measurements:
+        print('Using provided time-delay measurements from file:', td_measurements_file)
+        td_measurement_df = pd.read_csv(td_measurements_file)
+        td_measurement_df_idxs = td_measurement_df.loc[:,'catalog_idx']
+        td_measurement_df_idx = np.isin(td_measurement_df_idxs,catalog_idxs)
+        td_measurement_df_sub = td_measurement_df.loc[td_measurement_df_idx]
+        td_meas, td_meas_prec = retrieve_measured_td(td_measurement_df_sub, num_td)
+    else:
+    # emulate time-delay measurement
+        td_meas, td_meas_prec = emulate_measurements(td_truth, 
+            td_meas_error_percent,td_meas_error_days)
+    # print(td_meas, td_meas_prec)
     
     # emulate kappa_ext
     if num_gaussianized_samps is not None:
@@ -310,6 +361,8 @@ def create_static_data_vectors(
     # pad with a 2nd batch dim for # of fpd samples
     data_vector_dict['td_measured'] = np.repeat(td_meas[:, np.newaxis, :],
         num_fpd_samps, axis=1)
+    print(td_meas_prec.shape)
+    print(td_meas_prec)
     data_vector_dict['td_likelihood_prec'] = np.repeat(td_meas_prec[:, np.newaxis, :, :],
         num_fpd_samps, axis=1)
     data_vector_dict['td_likelihood_prefactors'] = np.log( (1/(2*np.pi)**(num_td/2)) / 
