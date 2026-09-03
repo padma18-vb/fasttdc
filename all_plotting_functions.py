@@ -144,7 +144,7 @@ CORNER_KWARGS = dict(
     label_kwargs=dict(fontsize=30),
     title_kwargs=dict(fontsize=30, loc="left"),
     plot_density=True,
-    plot_datapoints=True,
+    plot_datapoints=False,
     fill_contours=True,
     show_titles=True,
     max_n_ticks=10,
@@ -188,6 +188,7 @@ def make_contour(
     truths_list=None,
     show_every_title=False,
     save_fig=False,
+    plot_lines=True,
 ):
     cat_to_col = dict(zip(categories, colors))
     legend_elements = []
@@ -268,7 +269,7 @@ def make_contour(
                 ax = fig_ax_list[ax_stored]
                 ax.text(
                     0.6,
-                    0.9 - i / 10,
+                    0.9 - i / 8,
                     to_put[ax_stored],
                     size=18,
                     color=colors[i],
@@ -278,7 +279,7 @@ def make_contour(
 
         if show_every_title and i < len(list_of_dists) - 1:
             color_i = colors[i]
-            inch =  0.11 * i
+            inch =  0.2 * i
             for panel in range(len(fig.axes)):
                 ax = fig.axes[panel]
                 titles_curr = ax.get_title("left")
@@ -286,7 +287,7 @@ def make_contour(
                     continue
                 ax.text(
                     0,
-                    1.25 + (0.06 * len(list_of_dists)) - inch,
+                    1.25 + (0.15 * len(list_of_dists)) - inch,
                     titles_curr,
                     color=color_i,
                     weight=5,

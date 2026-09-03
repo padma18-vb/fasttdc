@@ -16,11 +16,11 @@ parser = argparse.ArgumentParser(description="Run model with specific configurat
 parser.add_argument('--config',help="Name of config, stored in InferenceRuns/") # ex: exp0_1_config
 parser.add_argument("--use-MPI", action="store_true", help="Use MPI for parallel processing.")
 parser.add_argument("--use-multiprocess", action="store_true", help="Use multiprocess for parallel processing.")
+
 args = parser.parse_args()
 config_name = args.config
 use_MPI = args.use_MPI
 use_multiprocess = args.use_multiprocess
-
 # TODO: switch to feeding in a config file
 config_module = import_module(config_name)
 

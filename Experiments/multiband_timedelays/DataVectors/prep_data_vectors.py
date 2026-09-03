@@ -58,16 +58,22 @@ def extract_cov(s, max_dim=3):
     k = min(n, max_dim)
     return full[:k, :k]
 
-
 def retrieve_measured_td(df,num_td):
     if num_td == 1: 
         # NOTE: will this keep the last dim=(..,..,1) ? 
-        td_measured = df.loc[:,['td01']].to_numpy()
+        td_truth = df.loc[:,['td01_true']].to_numpy()
     elif num_td == 3:
-        td_measured = df.loc[:,['td01','td02','td03']].to_numpy()
+        # sample from a multivariate normal with the provided covariance matrix
+        td_truth = df.loc[:,['td01_true','td02_true','td03_true']].to_numpy()
     df['prec_scaled_matrix'] = df['prec_scaled'].apply(extract_cov)
+    df['cov_scaled_matrix'] = df['cov_scaled'].apply(extract_cov)
     td_prec = np.array(df['prec_scaled_matrix'].to_list())
-    return td_measured, td_prec
+    td_cov = np.array(df['cov_scaled_matrix'].to_list())
+    
+    td_measured = np.array([multivariate_normal.rvs(mean=t, cov=c, size=1) for t, c in zip(td_truth, td_cov)])
+    td_measured = td_measured.reshape(td_truth.shape)
+    # td_measured = td_truth
+    return td_measured, td_prec, td_cov
 
 def retrieve_truth_kin(metadata_df,kinematic_type):
     """
@@ -269,14 +275,13 @@ def create_static_data_vectors(
 
     
     td_truth = retrieve_truth_td(metadata_df, num_td)
-    print()
     if use_td_measurements:
         print('Using provided time-delay measurements from file:', td_measurements_file)
         td_measurement_df = pd.read_csv(td_measurements_file)
         td_measurement_df_idxs = td_measurement_df.loc[:,'catalog_idx']
         td_measurement_df_idx = np.isin(td_measurement_df_idxs,catalog_idxs)
         td_measurement_df_sub = td_measurement_df.loc[td_measurement_df_idx]
-        td_meas, td_meas_prec = retrieve_measured_td(td_measurement_df_sub, num_td)
+        td_meas, td_meas_prec, td_meas_cov = retrieve_measured_td(td_measurement_df_sub, num_td)
     else:
     # emulate time-delay measurement
         td_meas, td_meas_prec = emulate_measurements(td_truth, 
@@ -361,12 +366,19 @@ def create_static_data_vectors(
     # pad with a 2nd batch dim for # of fpd samples
     data_vector_dict['td_measured'] = np.repeat(td_meas[:, np.newaxis, :],
         num_fpd_samps, axis=1)
-    print(td_meas_prec.shape)
-    print(td_meas_prec)
+
     data_vector_dict['td_likelihood_prec'] = np.repeat(td_meas_prec[:, np.newaxis, :, :],
         num_fpd_samps, axis=1)
-    data_vector_dict['td_likelihood_prefactors'] = np.log( (1/(2*np.pi)**(num_td/2)) / 
-        np.sqrt(np.linalg.det(np.linalg.inv(data_vector_dict['td_likelihood_prec']))) )
+
+    if use_td_measurements:
+        data_vector_dict['td_likelihood_cov'] = np.repeat(td_meas_cov[:, np.newaxis, :, :],
+        num_fpd_samps, axis=1)
+
+        data_vector_dict['td_likelihood_prefactors'] = np.log( (1/(2*np.pi)**(num_td/2)) / 
+                np.sqrt(np.linalg.det(data_vector_dict['td_likelihood_cov'])) )
+    else:
+        data_vector_dict['td_likelihood_prefactors'] = np.log( (1/(2*np.pi)**(num_td/2)) / 
+            np.sqrt(np.linalg.det(np.linalg.inv(data_vector_dict['td_likelihood_prec']))) )
 
     # save info to data_vector_dict for later use
     data_vector_dict['lens_params_nu_int_means'] = lens_params_nu_int_means

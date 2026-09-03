@@ -1,3 +1,5 @@
 **/__pycache__/
 Experiments/multiband_timedelays/InferenceRuns/
 Experiments/lsst_forecast/InferenceRuns/
+Experiments/multiband_timedelays/DataVectors/**
+**/.DS_Store

@@ -22,6 +22,10 @@ cosmo_models available:
     'w0waCDM': [H0,OmegaM,w0,wa,mu(gamma_lens),sigma(gamma_lens)]
     'LCDM_lambda_int': [H0,OmegaM,mu(lambda_int),sigma(lambda_int),
         mu(gamma_lens),sigma(gamma_lens)]
+    'LCDM_lambda_int_beta_ani_TD_systematic_uncertainty':
+      [H0,OmegaM,mu(lambda_int),sigma(lambda_int),
+        mu(beta_ani),sigma(beta_ani),mu(gamma_lens),sigma(gamma_lens), 
+        mu(TD_systematic_uncertainty), sigma(TD_systematic_uncertainty)]
     'LCDM_lambda_int_beta_ani'
     'w0waCDM_lambda_int_beta_ani'
     'w0waCDM_fullcPDF'
@@ -38,7 +42,7 @@ cosmo_models available:
 class TDCLikelihood():
 
     def __init__(self, fpd_sample_shape, cosmo_model='LCDM',
-                 use_gamma_info=True, use_astropy=False):
+                 use_gamma_info=True, use_astropy=False, ):
         """
         Keep track of quantities that remain constant throughout the inference
 
@@ -62,11 +66,14 @@ class TDCLikelihood():
         """
 
         if cosmo_model not in ['LCDM', 'LCDM_lambda_int',
-                               'LCDM_lambda_int_beta_ani', 'w0waCDM', 
+                               'LCDM_lambda_int_beta_ani', 'LCDM_lambda_int_beta_ani_TD_systematic_uncertainty',
+                               'w0waCDM', 
                                'w0waCDM_lambda_int_beta_ani',
                                'w0waCDM_fullcPDF','w0waCDM_fullcPDF_noKIN']:
             raise ValueError("choose from available cosmo_models: " +
-                             "LCDM, LCDM_lambda_int, LCDM_lambda_int_beta_ani, w0waCDM, " +
+                             "LCDM, LCDM_lambda_int, LCDM_lambda_int_beta_ani, " +
+                             'LCDM_lambda_int_beta_ani_TD_systematic_uncertainty,' +
+                             "w0waCDM, " +
                              "w0waCDM_lambda_int_beta_ani, w0waCDM_fullcPDF")
         self.cosmo_model = cosmo_model
         self.use_gamma_info = use_gamma_info
@@ -140,38 +147,97 @@ class TDCLikelihood():
 
         return td_pred
 
-    def td_log_likelihood_per_samp(self, td_pred_samples, data_vector_dict=None, 
-            global_data_vector_idx=None,):
+    def td_log_likelihood_per_samp(self, td_pred_samples, data_vector_dict=None,
+        global_data_vector_idx=None, sys_unc_samples=None):
         """
         Args:
-            td_pred_samples (n_lenses,n_fpd_samps,3)
+            td_pred_samples (n_lenses,n_fpd_samps,num_td)
+            sys_unc_samples (n_lenses,n_fpd_samps,num_td), optional: extra
+                per-time-delay systematic std added in quadrature to the
+                measurement covariance diagonal, per fpd sample.
 
         Returns:
             td_log_likelihood_per_fpd_samp (n_lenses,n_fpd_samps)
         """
-
-        # check whether using global data vectors or passing directly...
         if global_data_vector_idx is not None:
-            # make sure we're not trying to do two things at once
             if data_vector_dict is not None:
                 raise ValueError('pass data vector OR index into global data vector, not both')
-            # retrieve globally stored data vectors
             data_vector_dict = data_vector_global[global_data_vector_idx]
 
         x_minus_mu = (td_pred_samples - data_vector_dict['td_measured'])
-        # add dimension s.t. x_minus_mu is 2D
         x_minus_mu = np.expand_dims(x_minus_mu, axis=-1)
-        # matmul should condense the (# of time delays) dim.
+
+        if sys_unc_samples is None:
+            prec = data_vector_dict['td_likelihood_prec']
+            prefactors = data_vector_dict['td_likelihood_prefactors']
+        else:
+            num_td = data_vector_dict['td_measured'].shape[-1]
+            n_lenses, n_fpd_samps = sys_unc_samples.shape
+            sys_cov_diag = np.zeros((n_lenses, n_fpd_samps, num_td, num_td))
+            idx = np.arange(num_td)
+            sys_cov_diag[..., idx, idx] = sys_unc_samples[..., np.newaxis]**2
+            num_td = data_vector_dict['td_measured'].shape[-1]
+            # print('measurements shape: ', data_vector_dict['td_measured'].shape)
+            # print('covariances shape: ', data_vector_dict['td_likelihood_cov'].shape)
+            base_cov = data_vector_dict['td_likelihood_cov'][:, np.newaxis, :, :]
+            # print('base_cov shape: ', base_cov.shape)
+            # this is where we build the systematic uncertainty covariance matrix,
+            #  which is diagonal and added to the base covariance
+            # print('sys_unc_samples shape: ', sys_unc_samples.shape)
+            # sys_cov_diag = np.zeros(sys_unc_samples.shape + (num_td,))
+            # print('sys_cov_diag shape: ', sys_cov_diag.shape)
+            # idx = np.arange(num_td)
+            # sys_cov_diag[..., idx, idx] = sys_unc_samples**2
+
+            total_cov = base_cov + sys_cov_diag  # (n_lenses,n_fpd_samps,num_td,num_td)
+
+            prec = np.linalg.inv(total_cov)
+            det = np.linalg.det(total_cov)
+            prefactors = np.log((1 / (2 * np.pi)**(num_td / 2)) / np.sqrt(det))
+
         exponent = -0.5 * np.matmul(np.transpose(x_minus_mu, axes=(0, 1, 3, 2)),
-                                    np.matmul(data_vector_dict['td_likelihood_prec'], x_minus_mu))
+                                    np.matmul(prec, x_minus_mu))
+        exponent = np.squeeze(exponent, axis=-1)
+        exponent = np.squeeze(exponent, axis=-1)
 
-        # reduce to two dimensions: (n_lenses,n_fpd_samples)
-        # reduce only the last two dims to avoid edge cases (i.e. what if only one lens...)
-        exponent = np.squeeze(exponent,axis=-1)
-        exponent = np.squeeze(exponent,axis=-1)
+        return prefactors + exponent
 
-        # log-likelihood
-        return data_vector_dict['td_likelihood_prefactors'] + exponent
+    # def td_log_likelihood_per_samp(self, td_pred_samples, data_vector_dict=None, 
+    #         global_data_vector_idx=None,sys_unc_samples=None):
+    #     """
+    #     Args:
+    #         td_pred_samples (n_lenses,n_fpd_samps,3)
+
+    #     Returns:
+    #         td_log_likelihood_per_fpd_samp (n_lenses,n_fpd_samps)
+    #     """
+
+    #     # check whether using global data vectors or passing directly...
+    #     if global_data_vector_idx is not None:
+    #         # make sure we're not trying to do two things at once
+    #         if data_vector_dict is not None:
+    #             raise ValueError('pass data vector OR index into global data vector, not both')
+    #         # retrieve globally stored data vectors
+    #         data_vector_dict = data_vector_global[global_data_vector_idx]
+    #     # 
+    #     x_minus_mu = (td_pred_samples - data_vector_dict['td_measured'])
+    #     # add dimension s.t. x_minus_mu is 2D
+    #     x_minus_mu = np.expand_dims(x_minus_mu, axis=-1)
+    #     # matmul should condense the (# of time delays) dim.
+    #     exponent = -0.5 * np.matmul(np.transpose(x_minus_mu, axes=(0, 1, 3, 2)),
+    #                                 np.matmul(data_vector_dict['td_likelihood_prec'], x_minus_mu))
+
+    #     # reduce to two dimensions: (n_lenses,n_fpd_samples)
+    #     # reduce only the last two dims to avoid edge cases (i.e. what if only one lens...)
+    #     exponent = np.squeeze(exponent,axis=-1)
+    #     exponent = np.squeeze(exponent,axis=-1)
+
+    #     # we want to add a systematic error term to the likelihood, if desired
+        
+    #     # this is where we want to add a systematic error term to the likelihood, if desired
+    #     # this systematic error term would constrained during the hierarchical inference
+    #     td_likelihood_prefactors = data_vector_dict['td_likelihood_prefactors']
+    #     return  td_likelihood_prefactors + exponent
 
 
     def construct_proposed_cosmo(self, hyperparameters):
@@ -190,7 +256,7 @@ class TDCLikelihood():
         omega_c_input = hyperparameters[1] - 0.05  # CDM fraction
         omega_de_input = 1. - omega_m_input
         if self.cosmo_model in ['LCDM', 'LCDM_lambda_int',
-                                'LCDM_lambda_int_beta_ani']:
+                                'LCDM_lambda_int_beta_ani', 'LCDM_lambda_int_beta_ani_TD_systematic_uncertainty']:
             w0_input = -1.
             wa_input = 0.
         elif self.cosmo_model in ['w0waCDM', 'w0waCDM_lambda_int_beta_ani',
@@ -233,6 +299,7 @@ class TDCLikelihood():
 
         # importance sampling over lambda_int based on proposal distribution
         lambda_int_samples = None
+        mu_sys_unc = None
         mu_lint = None
         if self.cosmo_model == 'LCDM_lambda_int':
             # NOTE: hardcoding of hyperparameter order!! (-4 is mu, -3 is sigma)
@@ -243,6 +310,11 @@ class TDCLikelihood():
             # NOTE: hardcoding of hyperparameter order!! (-6 is mu, -5 is sigma)
             mu_lint = hyperparameters[-6]
             sigma_lint = hyperparameters[-5]
+        elif self.cosmo_model in ['LCDM_lambda_int_beta_ani_TD_systematic_uncertainty']:
+            mu_lint = hyperparameters[-6]
+            sigma_lint = hyperparameters[-5]
+            mu_sys_unc = hyperparameters[-2]
+            sigma_sys_unc = hyperparameters[-1]
 
         elif self.cosmo_model == 'w0waCDM_fullcPDF':
             # NOTE: hardcoding of hyperparameter order!! (4 is mu, 5 is sigma)
@@ -253,8 +325,12 @@ class TDCLikelihood():
             lambda_int_samples = truncnorm.rvs(-mu_lint / sigma_lint, np.inf,
                                                loc=mu_lint, scale=sigma_lint,
                                                size=(self.num_lenses, self.num_fpd_samples))
+        if mu_sys_unc is not None:
+            sys_unc_samples = truncnorm.rvs(-mu_sys_unc / sigma_sys_unc, np.inf,
+                                            loc=mu_sys_unc, scale=sigma_sys_unc,
+                                            size=(self.num_lenses, self.num_fpd_samples))
 
-        return self.construct_proposed_cosmo(hyperparameters), lambda_int_samples
+        return self.construct_proposed_cosmo(hyperparameters), lambda_int_samples, sys_unc_samples
 
     def full_log_likelihood(self, hyperparameters, data_vector_dict=None, 
             global_data_vector_idx=None):
@@ -266,7 +342,7 @@ class TDCLikelihood():
         """
 
         # construct cosmology + lint samps (if required) from hyperparameters
-        proposed_cosmo, lambda_int_samples = self.process_hyperparam_proposal(
+        proposed_cosmo, lambda_int_samples, sys_unc_samples = self.process_hyperparam_proposal(
             hyperparameters)
 
         # td_pred_samples from fpd_pred_samples
@@ -275,7 +351,8 @@ class TDCLikelihood():
         # td likelihood for every sample from every lens
         td_log_likelihoods = self.td_log_likelihood_per_samp(
             td_pred_samples, data_vector_dict=data_vector_dict, 
-            global_data_vector_idx=global_data_vector_idx
+            global_data_vector_idx=global_data_vector_idx,
+            sys_unc_samples=sys_unc_samples
         )
 
         # reweighting factor
@@ -476,8 +553,8 @@ class TDCKinLikelihood(TDCLikelihood):
             fpd_sample_shape: shape of fpd samples (n_lenses,n_fpd_samples,dim_fpd)
             kin_pred_samples_shape: shape of kinematic samples (n_lenses,n_fpd_samples,num_kin_bins)
             log_prob_gamma_nu_int: TODO
-            cosmo_model (string): 'LCDM', 'w0waCDM', 'LCDM_lambda_int', or
-                'LCDM_lambda_int_beta_ani'
+            cosmo_model (string): 'LCDM', 'w0waCDM', 'LCDM_lambda_int', 
+                'LCDM_lambda_int_beta_ani' or 'LCDM_lambda_int_beta_ani_TD_systematic_uncertainty'
             use_gamma_info (bool): If False, removes reweighting from likelihood
                 evaluation (any population level gamma params should just
                 return the prior then...)
@@ -602,7 +679,7 @@ class TDCKinLikelihood(TDCLikelihood):
         """
 
         # construct cosmology from hyperparameters
-        proposed_cosmo, lambda_int_samples = self.process_hyperparam_proposal(
+        proposed_cosmo, lambda_int_samples, sys_unc_samples = self.process_hyperparam_proposal(
             hyperparameters)
 
         # td log likelihood per sample
@@ -612,7 +689,8 @@ class TDCKinLikelihood(TDCLikelihood):
                 lambda_int_samples=lambda_int_samples)
         td_log_likelihoods = self.td_log_likelihood_per_samp(
             td_pred_samples, data_vector_dict=data_vector_dict, 
-            global_data_vector_idx=global_data_vector_idx)
+            global_data_vector_idx=global_data_vector_idx, 
+            sys_unc_samples=sys_unc_samples)
         td_log_likelihoods = np.asarray(td_log_likelihoods)
 
         # kin log likelihood per sample
@@ -749,6 +827,37 @@ def LCDM_lambda_int_beta_ani_log_prior(hyperparameters):
     
     return 0
 
+def LCDM_lambda_int_beta_ani_log_prior_TD_systematic_uncertainty(hyperparameters):
+    """
+    Args:
+        hyperparameters ([H0,omega_M,mu_lambda_int,sigma_lambda_int,
+            mu_beta_ani,sigma_beta_ani,mu_gamma,sigma_gamma,
+            mu_sys_unc,sigma_sys_unc])
+    """
+
+    if hyperparameters[0] < 0 or hyperparameters[0] > 150: #h0
+        return -np.inf
+    if hyperparameters[1] < 0.05 or hyperparameters[1] > 0.5: #omega_M 
+        return -np.inf
+    elif hyperparameters[2] < 0.5 or hyperparameters[2] > 1.5: #mu(lambda_int)
+        return -np.inf
+    elif hyperparameters[3] < 0.001 or hyperparameters[3] > 0.5: #sigma(lambda_int)
+        return -np.inf
+    elif hyperparameters[4] < -0.5 or hyperparameters[4] > 0.5: #mu(beta_ani)
+        return -np.inf
+    elif hyperparameters[5] < 0.001 or hyperparameters[5] > 0.2: #sigma(beta_ani)
+        return -np.inf
+    elif hyperparameters[6] < 1.5 or hyperparameters[6] > 2.5: #mu(gamma_lens)
+        return -np.inf
+    elif hyperparameters[7] < 0.001 or hyperparameters[7] > 0.2: #sigma(gamma_lens)
+        return -np.inf
+    ### TODO: CHANGE THIS PRIOR!!!!!
+    elif hyperparameters[8] < 1.5 or hyperparameters[8] > 2.5: #mu(systematic uncertainty)
+            return -np.inf
+    elif hyperparameters[9] < 0.001 or hyperparameters[9] > 0.2: #sigma(systematic uncertainty)
+            return -np.inf
+    return 0
+
 def w0waCDM_log_prior(hyperparameters):
     """
     Args:
@@ -780,7 +889,7 @@ def w0waCDM_lambda_int_beta_ani_log_prior(hyperparameters):
     """
     Args:
         hyperparameters ([H0,omega_M,mu_lambda_int,sigma_lambda_int,
-            mu_gamma,sigma_gamma])
+            mu_beta_ani,sigma_beta_ani,mu_gamma,sigma_gamma])
     """
 
     if hyperparameters[0] < 0 or hyperparameters[0] > 150: #h0
@@ -812,7 +921,7 @@ def tdcosmo25_lambda_int_beta_ani_log_prior(hyperparameters):
     """
     Args:
         hyperparameters ([H0,omega_M,mu_lambda_int,sigma_lambda_int,
-            mu_gamma,sigma_gamma])
+            mu_beta_ani,sigma_beta_ani,mu_gamma,sigma_gamma])
     """
 
     if hyperparameters[0] < 0 or hyperparameters[0] > 150: #h0
@@ -1122,14 +1231,32 @@ def generate_initial_state(n_walkers,cosmo_model,use_tdcosmo25=False,
         cur_state = np.empty((n_walkers,8))
         cur_state[:,0] = uniform.rvs(loc=40,scale=60,size=n_walkers) #h0
         cur_state[:,1] = uniform.rvs(loc=0.1,scale=0.35,size=n_walkers) #Omega_M
-        cur_state[:,2] = uniform.rvs(loc=0.9,scale=0.2,size=n_walkers)
-        cur_state[:,3] = uniform.rvs(loc=0.001,scale=0.499,size=n_walkers)
-        cur_state[:,4] = uniform.rvs(loc=-0.1,scale=0.2,size=n_walkers)
-        cur_state[:,5] = uniform.rvs(loc=0.001,scale=0.199,size=n_walkers)
-        cur_state[:,6] = uniform.rvs(loc=1.5,scale=1.,size=n_walkers)
-        cur_state[:,7] = uniform.rvs(loc=0.001,scale=0.199,size=n_walkers)
+        cur_state[:,2] = uniform.rvs(loc=0.9,scale=0.2,size=n_walkers) #mu(lambda_int)
+        cur_state[:,3] = uniform.rvs(loc=0.001,scale=0.499,size=n_walkers) #sigma(lambda_int)
+        cur_state[:,4] = uniform.rvs(loc=-0.1,scale=0.2,size=n_walkers) #mu(beta_ani)
+        cur_state[:,5] = uniform.rvs(loc=0.001,scale=0.199,size=n_walkers) #sigma(beta_ani)
+        cur_state[:,6] = uniform.rvs(loc=1.5,scale=1.,size=n_walkers) #mu(gamma_lens)
+        cur_state[:,7] = uniform.rvs(loc=0.001,scale=0.199,size=n_walkers) #sigma(gamma_lens)
+        cur_state[:,8] = uniform.rvs(loc=0.0001, scale=10, size=n_walkers)
 
         return cur_state
+
+    if cosmo_model == 'LCDM_lambda_int_beta_ani_TD_systematic_uncertainty':
+            # order: [H0,Omega_M,mu_lambda_int,sigma_lambda_int,
+            #   mu_beta_ani,sigma_beta_ani,mu_gamma,sigma_gamma, mu_sys_unc,sigma_sys_unc]
+            cur_state = np.empty((n_walkers,10))
+            cur_state[:,0] = uniform.rvs(loc=40,scale=60,size=n_walkers) #h0
+            cur_state[:,1] = uniform.rvs(loc=0.1,scale=0.35,size=n_walkers) #Omega_M
+            cur_state[:,2] = uniform.rvs(loc=0.9,scale=0.2,size=n_walkers) #mu(lambda_int)
+            cur_state[:,3] = uniform.rvs(loc=0.001,scale=0.499,size=n_walkers) #sigma(lambda_int)
+            cur_state[:,4] = uniform.rvs(loc=-0.1,scale=0.2,size=n_walkers) #mu(beta_ani)
+            cur_state[:,5] = uniform.rvs(loc=0.001,scale=0.199,size=n_walkers) #sigma(beta_ani)
+            cur_state[:,6] = uniform.rvs(loc=1.5,scale=1.,size=n_walkers) #mu(gamma_lens)
+            cur_state[:,7] = uniform.rvs(loc=0.001,scale=0.199,size=n_walkers) #sigma(gamma_lens)
+            cur_state[:,8] = uniform.rvs(loc=0.0001, scale=10, size=n_walkers)
+            cur_state[:,9] = uniform.rvs(loc=0.0001, scale=2, size=n_walkers)
+    
+            return cur_state
     
     elif cosmo_model == 'w0waCDM':
         # order: [H0,Omega_M,w0,wa,mu_gamma,sigma_gamma]
@@ -1215,13 +1342,15 @@ def log_likelihood(hyperparameters,tdc_likelihood_list):
 
 def log_posterior(hyperparameters, cosmo_model, tdc_likelihood_list,
     use_informative=False,use_inf_pop=False,
-    use_OmegaM=False,use_tdcosmo25=False):
+    use_OmegaM=False,use_tdcosmo25=False ):
     """
     Args:
         hyperparameters ([float]): 
             - LCDM: [H0,Omega_M,mu_gamma,sigma_gamma] 
             - LCDM_lambda_int_beta_ani: [H0,Omega_M,
                 mu_lint,sigma_lint,mu_bani,sigma_bani,mu_gamma,sigma_gamma] 
+            - LCDM_lambda_int_beta_ani_TD_systematic_uncertainty:[H0,Omega_M,
+                mu_lint,sigma_lint,mu_bani,sigma_bani,mu_gamma,sigma_gamma,mu_sys_unc, sigma_sys_unc]
             - w0waCDM: [H0,Omega_M,w0,wa,mu_gamma,sigma_gamma]
     """
     #rank = MPI.COMM_WORLD.Get_rank()
@@ -1240,6 +1369,9 @@ def log_posterior(hyperparameters, cosmo_model, tdc_likelihood_list,
             lp = OmegaM_LCDM_lambda_int_beta_ani_log_prior(hyperparameters)
         else:
             lp = LCDM_lambda_int_beta_ani_log_prior(hyperparameters)
+    elif cosmo_model == 'LCDM_lambda_int_beta_ani_TD_systematic_uncertainty':
+        lp = LCDM_lambda_int_beta_ani_log_prior_TD_systematic_uncertainty(hyperparameters)
+
     elif cosmo_model == 'w0waCDM':
         lp = w0waCDM_log_prior(hyperparameters)
     elif cosmo_model == 'w0waCDM_lambda_int_beta_ani':
@@ -1269,7 +1401,7 @@ def log_posterior(hyperparameters, cosmo_model, tdc_likelihood_list,
 def fast_TDC(tdc_likelihood_list, data_vector_list, num_emcee_samps=1000,
     n_walkers=20, use_mpi=False, use_multiprocess=False, backend_path=None, 
     reset_backend=True,sampler_type='emcee',use_informative=False,
-    use_inf_pop=False,use_OmegaM=False,use_tdcosmo25=False,init_seed=None):
+    use_inf_pop=False,use_OmegaM=False,use_tdcosmo25=False,init_seed=None, ):
     """
     Args:
         tdc_likelihood_list ([TDCLikelihood]): list of likelihood objects 
@@ -1321,6 +1453,9 @@ def fast_TDC(tdc_likelihood_list, data_vector_list, num_emcee_samps=1000,
     cur_state = generate_initial_state(n_walkers,cosmo_model,
         use_tdcosmo25=use_tdcosmo25,
         random_seed=init_seed)
+    print('n_walkers: ', n_walkers)
+    print('cosmo_model: ', cosmo_model)
+    print("Initial state: ", cur_state)
 
     # emcee stuff here
     if not use_mpi:
