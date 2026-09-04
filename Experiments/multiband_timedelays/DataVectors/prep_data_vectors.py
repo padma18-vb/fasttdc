@@ -61,18 +61,18 @@ def extract_cov(s, max_dim=3):
 def retrieve_measured_td(df,num_td):
     if num_td == 1: 
         # NOTE: will this keep the last dim=(..,..,1) ? 
-        td_truth = df.loc[:,['td01_true']].to_numpy()
+        td_truth = df.loc[:,['td01']].to_numpy()
     elif num_td == 3:
         # sample from a multivariate normal with the provided covariance matrix
-        td_truth = df.loc[:,['td01_true','td02_true','td03_true']].to_numpy()
+        td_truth = df.loc[:,['td01','td02','td03']].to_numpy()
     df['prec_scaled_matrix'] = df['prec_scaled'].apply(extract_cov)
     df['cov_scaled_matrix'] = df['cov_scaled'].apply(extract_cov)
     td_prec = np.array(df['prec_scaled_matrix'].to_list())
     td_cov = np.array(df['cov_scaled_matrix'].to_list())
     
-    td_measured = np.array([multivariate_normal.rvs(mean=t, cov=c, size=1) for t, c in zip(td_truth, td_cov)])
-    td_measured = td_measured.reshape(td_truth.shape)
-    # td_measured = td_truth
+    # td_measured = np.array([multivariate_normal.rvs(mean=t, cov=c, size=1) for t, c in zip(td_truth, td_cov)])
+    # td_measured = td_measured.reshape(td_truth.shape)
+    td_measured = td_truth
     return td_measured, td_prec, td_cov
 
 def retrieve_truth_kin(metadata_df,kinematic_type):
