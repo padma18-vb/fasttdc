@@ -245,7 +245,7 @@ def make_contour(
         )
         corner.overplot_lines(fig, means, color=colors[i])
         if truths_list is not None:
-            corner.overplot_lines(fig, truths, color="black", linewidth=2)
+            corner.overplot_lines(fig, truths, color="black", linewidth=5)
         alpha = alpha + len(list_of_dists) / 10
         alpha = max(1, alpha)
         props1 = dict(boxstyle="round", facecolor="white")
@@ -299,7 +299,7 @@ def make_contour(
     # print(np.array(fig.get_axes()).shape)
 
     fig.legend(
-        handles=legend_elements, frameon=False, ncol=1, loc=(0.58, 0.8), fontsize=30
+        handles=legend_elements, frameon=False, ncol=1, loc=(0.58, 0.65), fontsize=30
     )
     # fig.tight_layout()
     if save_fig:

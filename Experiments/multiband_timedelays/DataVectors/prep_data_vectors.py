@@ -274,7 +274,7 @@ def create_static_data_vectors(
     metadata_df = all_metadata_df.loc[metadata_idx]
 
     
-    td_truth = retrieve_truth_td(metadata_df, num_td)
+    
     if use_td_measurements:
         print('Using provided time-delay measurements from file:', td_measurements_file)
         td_measurement_df = pd.read_csv(td_measurements_file)
@@ -284,6 +284,7 @@ def create_static_data_vectors(
         td_meas, td_meas_prec, td_meas_cov = retrieve_measured_td(td_measurement_df_sub, num_td)
     else:
     # emulate time-delay measurement
+        td_truth = retrieve_truth_td(metadata_df, num_td)
         td_meas, td_meas_prec = emulate_measurements(td_truth, 
             td_meas_error_percent,td_meas_error_days)
     # print(td_meas, td_meas_prec)
